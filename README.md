@@ -66,4 +66,34 @@ test/
 └── settings_test.dart     # Unit tests (see below)
 ```
 
-Platform
+Platform folders (`android/`, `ios/`, `web/`, `windows/`, `linux/`, `macos/`) are the standard Flutter targets.
+
+## Testing
+`test/settings_test.dart` covers:
+- parsing numeric input in Arabic and English formats
+- persisting theme, language, and currency
+- translation correctness
+- currency formatting rules
+
+```bash
+flutter test
+```
+
+## Getting started
+**Prerequisites:** the [Flutter SDK](https://docs.flutter.dev/get-started/install) and an emulator or physical device.
+
+```bash
+git clone https://github.com/IbrahiimHassan/Masroufi.git
+cd Masroufi
+flutter pub get
+flutter run
+```
+
+## Roadmap
+- [ ] Recurring expenses
+- [ ] Export reports to CSV/PDF
+- [ ] Cloud backup and sync
+- [ ] Multiple savings goals
+
+## Author
+Ibrahim Hassan | [LinkedIn](https://linkedin.com/in/ibrahim-hassan)
