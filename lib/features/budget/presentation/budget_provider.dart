@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../data/budget.dart';
@@ -7,6 +9,7 @@ class BudgetProvider extends ChangeNotifier {
   BudgetProvider(this._repository);
 
   final BudgetRepository _repository;
+  StreamSubscription<List<Budget>>? _subscription;
 
   List<Budget> _budgets = const [];
 
@@ -17,13 +20,19 @@ class BudgetProvider extends ChangeNotifier {
   List<Budget> get categoryBudgets =>
       _budgets.where((b) => b.category != null).toList();
 
-  Future<void> load() async {
-    _budgets = await _repository.getAll();
-    notifyListeners();
+  void listen() {
+    _subscription ??= _repository.watchAll().listen((budgets) {
+      _budgets = budgets;
+      notifyListeners();
+    }, onError: (Object e) => debugPrint('Budgets stream failed: $e'));
   }
 
-  Future<void> updateAmount(Budget budget, double amount) async {
-    await _repository.updateAmount(budget.id, amount);
-    await load();
+  void updateAmount(Budget budget, double amount) =>
+      _repository.updateAmount(budget.id, amount);
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 }

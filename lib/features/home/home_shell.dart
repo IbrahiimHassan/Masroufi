@@ -67,9 +67,9 @@ class _HomeShellState extends State<HomeShell> {
           );
     if (expense == null || !mounted) return;
 
-    // The only line that writes to SQLite: provider -> repository -> database.
-    await context.read<ExpenseProvider>().add(expense);
-    if (!mounted) return;
+    // The only line that writes an expense: provider -> repository ->
+    // Firestore. It shows up at once (local cache) and uploads when online.
+    context.read<ExpenseProvider>().add(expense);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(added)));
   }
 

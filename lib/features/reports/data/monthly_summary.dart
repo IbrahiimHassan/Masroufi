@@ -106,8 +106,8 @@ class MonthlySummary {
       return out;
     }
 
-    Map<int, CategorySpend> byCategory(List<Expense> items) {
-      final out = <int, CategorySpend>{};
+    Map<String, CategorySpend> byCategory(List<Expense> items) {
+      final out = <String, CategorySpend>{};
       for (final e in items) {
         final id = e.category.id!;
         out[id] = CategorySpend(e.category, (out[id]?.total ?? 0) + e.amount);

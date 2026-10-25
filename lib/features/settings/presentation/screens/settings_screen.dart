@@ -17,7 +17,7 @@ import '../widgets/payday_picker.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  // ───────── profile / money (saved in SQLite) ─────────
+  // ───────── profile / money (saved in Firestore) ─────────
 
   Future<void> _editName(BuildContext context, AppUser user) async {
     final s = context.s;
@@ -29,7 +29,7 @@ class SettingsScreen extends StatelessWidget {
       confirmLabel: s.save,
     );
     if (name == null || !context.mounted) return;
-    await context.read<AuthProvider>().updateProfile(name: name);
+    context.read<AuthProvider>().updateProfile(name: name);
   }
 
   Future<void> _editIncome(BuildContext context, AppUser user) async {
@@ -41,13 +41,13 @@ class SettingsScreen extends StatelessWidget {
       initialValue: user.monthlyIncome > 0 ? user.monthlyIncome : null,
     );
     if (income == null || !context.mounted) return;
-    await context.read<AuthProvider>().updateProfile(monthlyIncome: income);
+    context.read<AuthProvider>().updateProfile(monthlyIncome: income);
   }
 
   Future<void> _editPayday(BuildContext context, AppUser user) async {
     final day = await showPaydayPicker(context, initialDay: user.paydayDay);
     if (day == null || !context.mounted) return;
-    await context.read<AuthProvider>().updateProfile(paydayDay: day);
+    context.read<AuthProvider>().updateProfile(paydayDay: day);
   }
 
   // ───────── appearance / language / currency (saved in SharedPreferences) ─────────

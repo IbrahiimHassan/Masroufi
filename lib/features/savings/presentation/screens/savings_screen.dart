@@ -18,7 +18,7 @@ class SavingsScreen extends StatelessWidget {
       confirmLabel: s.add,
     );
     if (amount == null || !context.mounted) return;
-    await context.read<SavingsProvider>().addContribution(amount);
+    context.read<SavingsProvider>().addContribution(amount);
   }
 
   Future<void> _changeGoal(BuildContext context, double current) async {
@@ -30,7 +30,7 @@ class SavingsScreen extends StatelessWidget {
       initialValue: current,
     );
     if (amount == null || !context.mounted) return;
-    await context.read<SavingsProvider>().updateTarget(amount);
+    context.read<SavingsProvider>().updateTarget(amount);
   }
 
   String _milestone(BuildContext context, double progress) {

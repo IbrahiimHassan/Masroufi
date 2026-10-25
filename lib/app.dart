@@ -1,9 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'core/database/app_database.dart';
 import 'core/l10n/app_strings.dart';
 import 'core/settings/settings_provider.dart';
 import 'core/theme/app_theme.dart';
@@ -16,11 +17,13 @@ import 'user_scope.dart';
 class MasroufiApp extends StatelessWidget {
   const MasroufiApp({
     super.key,
-    required this.appDatabase,
+    required this.auth,
+    required this.firestore,
     required this.preferences,
   });
 
-  final AppDatabase appDatabase;
+  final FirebaseAuth auth;
+  final FirebaseFirestore firestore;
   final SharedPreferences preferences;
 
   @override
@@ -32,19 +35,18 @@ class MasroufiApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SettingsProvider(preferences)),
         ChangeNotifierProvider(
           create: (_) =>
-              AuthProvider(AuthRepository(appDatabase), preferences)
-                ..restoreSession(),
+              AuthProvider(AuthRepository(auth, firestore))..restoreSession(),
         ),
       ],
-      child: _AppView(appDatabase: appDatabase),
+      child: _AppView(firestore: firestore),
     );
   }
 }
 
 class _AppView extends StatelessWidget {
-  const _AppView({required this.appDatabase});
+  const _AppView({required this.firestore});
 
-  final AppDatabase appDatabase;
+  final FirebaseFirestore firestore;
 
   @override
   Widget build(BuildContext context) {
@@ -76,15 +78,15 @@ class _AppView extends StatelessWidget {
         maxScaleFactor: 1.4,
         child: child!,
       ),
-      home: _AuthGate(appDatabase: appDatabase),
+      home: _AuthGate(firestore: firestore),
     );
   }
 }
 
 class _AuthGate extends StatelessWidget {
-  const _AuthGate({required this.appDatabase});
+  const _AuthGate({required this.firestore});
 
-  final AppDatabase appDatabase;
+  final FirebaseFirestore firestore;
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +101,7 @@ class _AuthGate extends StatelessWidget {
 
     return UserScope(
       key: ValueKey(user.id),
-      appDatabase: appDatabase,
+      firestore: firestore,
       userId: user.id,
       child: const HomeShell(),
     );

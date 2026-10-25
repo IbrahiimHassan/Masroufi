@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../data/savings_goal.dart';
@@ -7,26 +9,33 @@ class SavingsProvider extends ChangeNotifier {
   SavingsProvider(this._repository);
 
   final SavingsRepository _repository;
+  StreamSubscription<SavingsGoal?>? _subscription;
 
   SavingsGoal? _goal;
   SavingsGoal? get goal => _goal;
 
-  Future<void> load() async {
-    _goal = await _repository.getMainGoal();
-    notifyListeners();
+  void listen() {
+    _subscription ??= _repository.watchMainGoal().listen((goal) {
+      _goal = goal;
+      notifyListeners();
+    }, onError: (Object e) => debugPrint('Savings stream failed: $e'));
   }
 
-  Future<void> addContribution(double amount) async {
+  void addContribution(double amount) {
     final goal = _goal;
     if (goal == null) return;
-    await _repository.addContribution(goal.id, amount);
-    await load();
+    _repository.addContribution(goal.id, amount);
   }
 
-  Future<void> updateTarget(double target) async {
+  void updateTarget(double target) {
     final goal = _goal;
     if (goal == null) return;
-    await _repository.updateTarget(goal.id, target);
-    await load();
+    _repository.updateTarget(goal.id, target);
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 }

@@ -1,4 +1,6 @@
-import '../../../core/database/tables.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../../core/firebase/collections.dart';
 
 class SavingsGoal {
   const SavingsGoal({
@@ -10,7 +12,7 @@ class SavingsGoal {
     required this.jarCharacter,
   });
 
-  final int id;
+  final String id;
   final String name;
   final double targetAmount;
   final double currentAmount;
@@ -20,13 +22,20 @@ class SavingsGoal {
   double get progress =>
       targetAmount <= 0 ? 0.0 : (currentAmount / targetAmount).clamp(0.0, 1.0);
 
-  factory SavingsGoal.fromMap(Map<String, Object?> map) => SavingsGoal(
-    id: map[SavingsGoalsTable.id] as int,
-    name: map[SavingsGoalsTable.name] as String,
-    targetAmount: (map[SavingsGoalsTable.targetAmount] as num).toDouble(),
-    currentAmount: (map[SavingsGoalsTable.currentAmount] as num).toDouble(),
-    monthlyContribution: (map[SavingsGoalsTable.monthlyContribution] as num)
-        .toDouble(),
-    jarCharacter: map[SavingsGoalsTable.jarCharacter] as String,
-  );
+  factory SavingsGoal.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final map = doc.data()!;
+    return SavingsGoal(
+      id: doc.id,
+      name: map[SavingsGoalsCollection.goalName] as String,
+      targetAmount: (map[SavingsGoalsCollection.targetAmount] as num)
+          .toDouble(),
+      currentAmount: (map[SavingsGoalsCollection.currentAmount] as num)
+          .toDouble(),
+      monthlyContribution:
+          (map[SavingsGoalsCollection.monthlyContribution] as num).toDouble(),
+      jarCharacter: map[SavingsGoalsCollection.jarCharacter] as String,
+    );
+  }
 }

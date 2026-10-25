@@ -27,7 +27,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   final _nameController = TextEditingController();
   final _merchantController = TextEditingController();
   final _amountController = TextEditingController();
-  int? _categoryId;
+  String? _categoryId;
 
   @override
   void initState() {
@@ -131,7 +131,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 ),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
+              DropdownButtonFormField<String>(
                 initialValue: _categoryId,
                 isExpanded: true,
                 decoration: InputDecoration(
@@ -140,7 +140,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 ),
                 items: widget.categories
                     .map(
-                      (category) => DropdownMenuItem<int>(
+                      (category) => DropdownMenuItem<String>(
                         value: category.id,
                         child: Text(s.categoryName(category.name)),
                       ),
