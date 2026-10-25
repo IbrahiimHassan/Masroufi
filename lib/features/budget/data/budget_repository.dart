@@ -1,37 +1,26 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/tables.dart';
-import '../../categories/data/category.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../../core/firebase/collections.dart';
+import '../../../core/firebase/firestore_cache.dart';
 import 'budget.dart';
 
 class BudgetRepository {
-  BudgetRepository(this._appDb, this._userId);
+  BudgetRepository(this._firestore, this._uid);
 
-  final AppDatabase _appDb;
-  final int _userId;
+  final FirebaseFirestore _firestore;
+  final String _uid;
 
-  Future<List<Budget>> getAll() async {
-    final db = await _appDb.database;
-    final rows = await db.rawQuery(
-      '''
-      SELECT b.*, ${Category.joinColumns}
-      FROM ${BudgetsTable.table} b
-      LEFT JOIN ${CategoriesTable.table} c
-        ON c.${CategoriesTable.id} = b.${BudgetsTable.categoryId}
-      WHERE b.${BudgetsTable.userId} = ?
-      ORDER BY b.${BudgetsTable.id}
-    ''',
-      [_userId],
-    );
-    return rows.map(Budget.fromMap).toList();
-  }
+  CollectionReference<Map<String, dynamic>> get _budgets => _firestore
+      .collection(UsersCollection.name)
+      .doc(_uid)
+      .collection(BudgetsCollection.name);
 
-  Future<void> updateAmount(int id, double amount) async {
-    final db = await _appDb.database;
-    await db.update(
-      BudgetsTable.table,
-      {BudgetsTable.amount: amount},
-      where: '${BudgetsTable.id} = ? AND ${BudgetsTable.userId} = ?',
-      whereArgs: [id, _userId],
-    );
-  }
+  Stream<List<Budget>> watchAll() => _budgets
+      .orderBy(BudgetsCollection.order)
+      .snapshots()
+      .map((snapshot) => snapshot.docs.map(Budget.fromFirestore).toList());
+
+  void updateAmount(String id, double amount) => sendInBackground(
+    _budgets.doc(id).update({BudgetsCollection.amount: amount}),
+  );
 }

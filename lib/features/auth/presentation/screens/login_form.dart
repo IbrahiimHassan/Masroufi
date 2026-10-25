@@ -12,6 +12,10 @@ final emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 String authMessage(AppStrings s, AuthError error) => switch (error) {
   AuthError.invalidCredentials => s.errorBadCredentials,
   AuthError.emailTaken => s.errorEmailTaken,
+  AuthError.weakPassword => s.passwordTooShort,
+  AuthError.network => s.errorNetwork,
+  AuthError.tooManyAttempts => s.errorTooManyAttempts,
+  AuthError.unknown => s.errorUnknown,
 };
 
 class LoginForm extends StatefulWidget {

@@ -1,6 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/database/tables.dart';
+import '../../../core/firebase/collections.dart';
 import '../../../core/utils/icon_registry.dart';
 
 class Category {
@@ -12,48 +13,36 @@ class Category {
     this.isDefault = false,
   });
 
-  final int? id;
+  final String? id;
   final String name;
   final String iconKey;
 
-  /// ARGB int (e.g. 0xFF17B77D) — SQLite stores it as INTEGER.
+  /// ARGB int (e.g. 0xFF17B77D) — stored as a number in Firestore.
   final int colorValue;
   final bool isDefault;
 
   Color get color => Color(colorValue);
   IconData get icon => iconFromKey(iconKey);
 
-  // ── Aliases used when another table JOINs categories (alias "c") ──
-  static const aliasName = 'category_name';
-  static const aliasIcon = 'category_icon';
-  static const aliasColor = 'category_color';
-  static const joinColumns =
-      'c.${CategoriesTable.name} AS $aliasName, '
-      'c.${CategoriesTable.iconKey} AS $aliasIcon, '
-      'c.${CategoriesTable.color} AS $aliasColor';
+  /// A custom category saved under users/{uid}/categories.
+  factory Category.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) =>
+      Category.fromEmbedded(doc.data()!, id: doc.id);
 
-  factory Category.fromMap(Map<String, Object?> map) => Category(
-    id: map[CategoriesTable.id] as int,
-    name: map[CategoriesTable.name] as String,
-    iconKey: map[CategoriesTable.iconKey] as String,
-    colorValue: map[CategoriesTable.color] as int,
-    isDefault: (map[CategoriesTable.isDefault] as int) == 1,
-  );
-
-  /// Builds a category from a row that used [joinColumns].
-  factory Category.fromJoinedMap(Map<String, Object?> map, {required int id}) =>
+  /// Reads the copy of a category stored inside an expense or budget.
+  factory Category.fromEmbedded(Map<String, dynamic> map, {String? id}) =>
       Category(
-        id: id,
-        name: map[aliasName] as String,
-        iconKey: map[aliasIcon] as String,
-        colorValue: map[aliasColor] as int,
+        id: id ?? map[CategoriesCollection.id] as String,
+        name: map[CategoriesCollection.categoryName] as String,
+        iconKey: map[CategoriesCollection.iconKey] as String,
+        colorValue: (map[CategoriesCollection.color] as num).toInt(),
+        isDefault: (map[CategoriesCollection.isDefault] as bool?) ?? false,
       );
 
-  Map<String, Object?> toMap() => {
-    if (id != null) CategoriesTable.id: id,
-    CategoriesTable.name: name,
-    CategoriesTable.iconKey: iconKey,
-    CategoriesTable.color: colorValue,
-    CategoriesTable.isDefault: isDefault ? 1 : 0,
+  Map<String, Object?> toEmbedded() => {
+    CategoriesCollection.id: id,
+    CategoriesCollection.categoryName: name,
+    CategoriesCollection.iconKey: iconKey,
+    CategoriesCollection.color: colorValue,
+    CategoriesCollection.isDefault: isDefault,
   };
 }

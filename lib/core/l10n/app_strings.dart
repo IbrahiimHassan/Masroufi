@@ -238,8 +238,10 @@ class AppStrings {
   String get haveAccount =>
       _t('Already have an account? Log in', 'لديك حساب بالفعل؟ سجّل الدخول');
   String get createYourAccount => _t('Create your account', 'أنشئ حسابك');
-  String get dataStaysOnPhone =>
-      _t('Your data stays on this phone.', 'بياناتك تبقى على هذا الهاتف.');
+  String get dataSyncedToAccount => _t(
+    'Your data is saved to your account and works offline.',
+    'بياناتك محفوظة في حسابك وتعمل بدون إنترنت.',
+  );
   String get showPassword => _t('Show password', 'إظهار كلمة المرور');
   String get hidePassword => _t('Hide password', 'إخفاء كلمة المرور');
   String get enterValidEmail =>
@@ -260,6 +262,23 @@ class AppStrings {
     'An account with this email already exists.',
     'يوجد حساب بهذا البريد الإلكتروني بالفعل.',
   );
+  String get errorNetwork => _t(
+    'No internet connection. Check your connection and try again.',
+    'لا يوجد اتصال بالإنترنت. تحقق من الاتصال وحاول مرة أخرى.',
+  );
+  String get errorTooManyAttempts => _t(
+    'Too many attempts. Please wait a moment and try again.',
+    'محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.',
+  );
+  String get errorUnknown => _t(
+    'Something went wrong. Please try again.',
+    'حدث خطأ ما. حاول مرة أخرى.',
+  );
+
+  // ───────────────────────── sync ─────────────────────────
+  String get syncOffline =>
+      _t('Offline · showing saved data', 'غير متصل · عرض البيانات المحفوظة');
+  String get syncPending => _t('Syncing changes…', 'جارٍ مزامنة التغييرات…');
 
   // ───────────────────────── dashboard ─────────────────────────
   String greeting(DateTime now) {

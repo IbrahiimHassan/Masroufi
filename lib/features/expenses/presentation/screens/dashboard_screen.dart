@@ -5,6 +5,7 @@ import '../../../../core/layout/responsive_cards.dart';
 import '../../../../core/utils/app_context.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/page_body.dart';
+import '../../../../core/widgets/sync_status_chip.dart';
 import '../../../auth/presentation/auth_provider.dart';
 import '../../../budget/presentation/budget_provider.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
@@ -72,6 +73,10 @@ class DashboardScreen extends StatelessWidget {
                   Text(
                     s.dateLong(now),
                     style: context.font(fontSize: 13, color: c.textSecondary),
+                  ),
+                  SyncStatusChip(
+                    isFromCache: expenses.isFromCache,
+                    hasPendingWrites: expenses.hasPendingWrites,
                   ),
                 ],
               ),

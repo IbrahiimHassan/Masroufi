@@ -1,6 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/database/tables.dart';
+import '../../../core/firebase/collections.dart';
 import '../../categories/data/category.dart';
 
 class Expense {
@@ -13,8 +14,8 @@ class Expense {
     required this.date,
   });
 
-  /// null until the row has been inserted.
-  final int? id;
+  /// Firestore document id; null until the expense has been saved.
+  final String? id;
   final String title;
   final Category category;
   final String merchant;
@@ -24,29 +25,30 @@ class Expense {
   Color get color => category.color;
   IconData get icon => category.icon;
 
-  /// Reads a row produced by ExpenseRepository's JOIN query.
-  factory Expense.fromMap(Map<String, Object?> map) {
-    final categoryId = map[ExpensesTable.categoryId] as int;
+  factory Expense.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final map = doc.data()!;
     return Expense(
-      id: map[ExpensesTable.id] as int,
-      title: map[ExpensesTable.title] as String,
-      merchant: (map[ExpensesTable.merchant] as String?) ?? '',
-      amount: (map[ExpensesTable.amount] as num).toDouble(),
-      date: DateTime.fromMillisecondsSinceEpoch(
-        map[ExpensesTable.expenseDate] as int,
+      id: doc.id,
+      title: map[ExpensesCollection.title] as String,
+      merchant: (map[ExpensesCollection.merchant] as String?) ?? '',
+      amount: (map[ExpensesCollection.amount] as num).toDouble(),
+      date: (map[ExpensesCollection.expenseDate] as Timestamp).toDate(),
+      category: Category.fromEmbedded(
+        Map<String, dynamic>.from(map[ExpensesCollection.category] as Map),
+        id: map[ExpensesCollection.categoryId] as String,
       ),
-      category: Category.fromJoinedMap(map, id: categoryId),
     );
   }
 
-  /// Only the columns that belong to the expenses table.
-  /// (user_id / created_at / updated_at are added by the repository.)
-  Map<String, Object?> toMap() => {
-    if (id != null) ExpensesTable.id: id,
-    ExpensesTable.categoryId: category.id,
-    ExpensesTable.title: title,
-    ExpensesTable.merchant: merchant,
-    ExpensesTable.amount: amount,
-    ExpensesTable.expenseDate: date.millisecondsSinceEpoch,
+  /// The fields the user controls.
+  /// (createdAt / updatedAt are added by the repository.)
+  Map<String, Object?> toFirestore() => {
+    ExpensesCollection.categoryId: category.id,
+    ExpensesCollection.category: category.toEmbedded(),
+    ExpensesCollection.title: title,
+    ExpensesCollection.merchant: merchant,
+    ExpensesCollection.amount: amount,
+    ExpensesCollection.expenseDate: Timestamp.fromDate(date),
+    ExpensesCollection.paymentMethod: 'cash',
   };
 }

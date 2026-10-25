@@ -1,23 +1,25 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/tables.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../../core/firebase/collections.dart';
 import 'category.dart';
+import 'default_categories.dart';
 
 class CategoryRepository {
-  CategoryRepository(this._appDb, this._userId);
+  CategoryRepository(this._firestore, this._uid);
 
-  final AppDatabase _appDb;
-  final int _userId;
+  final FirebaseFirestore _firestore;
+  final String _uid;
 
-  /// Default categories (user_id IS NULL) + this user's custom ones.
-  Future<List<Category>> getAll() async {
-    final db = await _appDb.database;
-    final rows = await db.query(
-      CategoriesTable.table,
-      where:
-          '${CategoriesTable.userId} IS NULL OR ${CategoriesTable.userId} = ?',
-      whereArgs: [_userId],
-      orderBy: CategoriesTable.id,
-    );
-    return rows.map(Category.fromMap).toList();
-  }
+  CollectionReference<Map<String, dynamic>> get _custom => _firestore
+      .collection(UsersCollection.name)
+      .doc(_uid)
+      .collection(CategoriesCollection.name);
+
+  /// Default categories + this user's custom ones.
+  Stream<List<Category>> watchAll() => _custom.snapshots().map(
+    (snapshot) => [
+      ...DefaultCategories.all,
+      ...snapshot.docs.map(Category.fromFirestore),
+    ],
+  );
 }

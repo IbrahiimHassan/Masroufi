@@ -80,7 +80,7 @@ class _RegisterFormState extends State<RegisterForm> {
           ),
           const SizedBox(height: 4),
           Text(
-            s.dataStaysOnPhone,
+            s.dataSyncedToAccount,
             style: context.font(fontSize: 14, color: c.textSecondary),
           ),
           const SizedBox(height: 20),

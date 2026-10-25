@@ -1,11 +1,19 @@
-import 'package:sqflite/sqflite.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-import '../../../core/database/app_database.dart';
-import '../../../core/database/tables.dart';
+import '../../../core/firebase/collections.dart';
+import '../../../core/firebase/firestore_cache.dart';
 import 'app_user.dart';
-import 'password_hasher.dart';
+import 'user_seeder.dart';
 
-enum AuthError { invalidCredentials, emailTaken }
+enum AuthError {
+  invalidCredentials,
+  emailTaken,
+  weakPassword,
+  network,
+  tooManyAttempts,
+  unknown,
+}
 
 /// A problem the user can fix. It carries a code, not text, so the screen can
 /// show it in the user's language.
@@ -17,162 +25,110 @@ class AuthException implements Exception {
   String toString() => 'AuthException($error)';
 }
 
+/// Firebase Auth for sign-in, Firestore (users/{uid}) for the profile.
+/// Firebase Auth also remembers the session, so the user stays logged in
+/// after closing the app.
 class AuthRepository {
-  AuthRepository(this._appDb);
+  AuthRepository(this._auth, this._firestore);
 
-  final AppDatabase _appDb;
+  final FirebaseAuth _auth;
+  final FirebaseFirestore _firestore;
 
-  static const _badLogin = AuthException(AuthError.invalidCredentials);
+  DocumentReference<Map<String, dynamic>> _profile(String uid) =>
+      _firestore.collection(UsersCollection.name).doc(uid);
 
-  Future<AppUser?> getById(int id) async {
-    final db = await _appDb.database;
-    final rows = await db.query(
-      UsersTable.table,
-      where: '${UsersTable.id} = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : AppUser.fromMap(rows.first);
-  }
+  /// The signed-in Firebase user, or null. Emits once at startup with the
+  /// saved session (works offline).
+  Stream<User?> authStateChanges() => _auth.authStateChanges();
 
-  Future<AppUser> register({
+  /// The profile document; null while it doesn't exist.
+  Stream<Synced<AppUser?>> watchProfile(String uid) => _profile(uid)
+      .snapshots()
+      .map(
+        (doc) => Synced(
+          doc.exists ? AppUser.fromFirestore(doc) : null,
+          doc.metadata,
+        ),
+      );
+
+  Future<void> register({
     required String name,
     required String email,
     required String password,
     double monthlyIncome = 0,
     int paydayDay = 1,
   }) async {
-    final db = await _appDb.database;
-    final normalizedEmail = email.trim().toLowerCase();
-    final salt = PasswordHasher.generateSalt();
-    final hash = PasswordHasher.hash(password, salt);
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    try {
-      // One transaction: either the account AND its starter data are created,
-      // or nothing is.
-      final id = await db.transaction<int>((txn) async {
-        final existing = await txn.query(
-          UsersTable.table,
-          columns: [UsersTable.id],
-          where: '${UsersTable.email} = ?',
-          whereArgs: [normalizedEmail],
-          limit: 1,
-        );
-        if (existing.isNotEmpty) {
-          throw const AuthException(AuthError.emailTaken);
-        }
-
-        final userId = await txn.insert(UsersTable.table, {
-          UsersTable.name: name.trim(),
-          UsersTable.email: normalizedEmail,
-          UsersTable.passwordHash: hash,
-          UsersTable.passwordSalt: salt,
-          UsersTable.defaultCurrency: 'EGP',
-          UsersTable.monthlyIncome: monthlyIncome,
-          UsersTable.paydayDay: paydayDay,
-          UsersTable.createdAt: now,
-        });
-        await _seedUserData(txn, userId, monthlyIncome, now);
-        return userId;
-      });
-      return (await getById(id))!;
-    } on DatabaseException catch (e) {
-      if (e.isUniqueConstraintError()) {
-        throw const AuthException(AuthError.emailTaken);
-      }
-      rethrow;
-    }
-  }
-
-  Future<AppUser> login(String email, String password) async {
-    final db = await _appDb.database;
-    final rows = await db.query(
-      UsersTable.table,
-      where: '${UsersTable.email} = ?',
-      whereArgs: [email.trim().toLowerCase()],
-      limit: 1,
+    final credential = await _guard(
+      () => _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      ),
     );
-    if (rows.isEmpty) throw _badLogin;
-
-    final row = rows.first;
-    final hash = row[UsersTable.passwordHash] as String?;
-    final salt = row[UsersTable.passwordSalt] as String?;
-    if (hash == null ||
-        salt == null ||
-        !PasswordHasher.verify(password, salt, hash)) {
-      throw _badLogin;
-    }
-    return AppUser.fromMap(row);
+    final user = credential.user!;
+    await user.updateDisplayName(name.trim());
+    await UserSeeder(_firestore).seed(
+      uid: user.uid,
+      name: name,
+      email: email,
+      monthlyIncome: monthlyIncome,
+      paydayDay: paydayDay,
+    );
   }
 
-  Future<AppUser> updateProfile(
-    int userId, {
+  Future<void> login(String email, String password) async {
+    final credential = await _guard(
+      () => _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      ),
+    );
+    // Accounts created outside the app (e.g. in the Firebase console) have
+    // no profile yet: give them the same starter data as a new sign-up.
+    final user = credential.user!;
+    final profile = await _profile(user.uid).get();
+    if (!profile.exists) {
+      await UserSeeder(_firestore).seed(
+        uid: user.uid,
+        name: user.displayName ?? user.email?.split('@').first ?? '',
+        email: user.email ?? email,
+      );
+    }
+  }
+
+  Future<void> logout() => _auth.signOut();
+
+  void updateProfile(
+    String uid, {
     String? name,
     double? monthlyIncome,
     int? paydayDay,
-  }) async {
-    final db = await _appDb.database;
+  }) {
     final values = <String, Object?>{
-      if (name != null) UsersTable.name: name,
-      if (monthlyIncome != null) UsersTable.monthlyIncome: monthlyIncome,
-      if (paydayDay != null) UsersTable.paydayDay: paydayDay,
+      UsersCollection.displayName: ?name,
+      UsersCollection.monthlyIncome: ?monthlyIncome,
+      UsersCollection.paydayDay: ?paydayDay,
     };
-    if (values.isNotEmpty) {
-      await db.update(
-        UsersTable.table,
-        values,
-        where: '${UsersTable.id} = ?',
-        whereArgs: [userId],
-      );
-    }
-    return (await getById(userId))!;
+    if (values.isEmpty) return;
+    sendInBackground(_profile(uid).update(values));
   }
 
-  /// Starter budgets + savings jar for a brand-new account.
-  /// With an income, the budget is split across the default categories;
-  /// without one everything starts at 0 and the user sets limits by tapping.
-  Future<void> _seedUserData(
-    Transaction txn,
-    int userId,
-    double income,
-    int now,
-  ) async {
-    final batch = txn.batch();
-
-    batch.insert(BudgetsTable.table, {
-      BudgetsTable.userId: userId,
-      BudgetsTable.categoryId: null,
-      BudgetsTable.amount: income,
-    });
-
-    // (categoryId, share of the monthly budget) — shares add up to 100%.
-    const shares = [
-      (5, 0.25), // Groceries
-      (1, 0.19), // Transport
-      (2, 0.22), // Bills
-      (3, 0.19), // Shopping
-      (4, 0.10), // Entertainment
-      (6, 0.05), // Other
-    ];
-    for (final (categoryId, share) in shares) {
-      batch.insert(BudgetsTable.table, {
-        BudgetsTable.userId: userId,
-        BudgetsTable.categoryId: categoryId,
-        BudgetsTable.amount: (income * share).roundToDouble(),
+  /// Turns Firebase's error codes into the few cases the UI explains.
+  static Future<T> _guard<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(switch (e.code) {
+        'invalid-credential' ||
+        'invalid-email' ||
+        'user-not-found' ||
+        'wrong-password' ||
+        'user-disabled' => AuthError.invalidCredentials,
+        'email-already-in-use' => AuthError.emailTaken,
+        'weak-password' => AuthError.weakPassword,
+        'network-request-failed' => AuthError.network,
+        'too-many-requests' => AuthError.tooManyAttempts,
+        _ => AuthError.unknown,
       });
     }
-
-    batch.insert(SavingsGoalsTable.table, {
-      SavingsGoalsTable.userId: userId,
-      SavingsGoalsTable.name: 'Savings jar',
-      SavingsGoalsTable.targetAmount: income > 0 ? income : 1000.0,
-      SavingsGoalsTable.currentAmount: 0.0,
-      SavingsGoalsTable.monthlyContribution: 0.0,
-      SavingsGoalsTable.jarCharacter: 'hamster',
-      SavingsGoalsTable.createdAt: now,
-    });
-
-    await batch.commit(noResult: true);
   }
 }

@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' hide Category;
 
+import '../../../core/firebase/firestore_cache.dart';
+import '../../../core/firebase/sync_status.dart';
 import '../../../core/utils/formatters.dart';
 import '../../categories/data/category.dart';
 import '../data/expense.dart';
@@ -19,10 +23,11 @@ class MonthTotal {
   final double amount;
 }
 
-class ExpenseProvider extends ChangeNotifier {
+class ExpenseProvider extends ChangeNotifier with SyncStatus {
   ExpenseProvider(this._repository);
 
   final ExpenseRepository _repository;
+  StreamSubscription<Synced<List<Expense>>>? _subscription;
 
   List<Expense> _expenses = const [];
   bool _isLoading = true;
@@ -31,33 +36,54 @@ class ExpenseProvider extends ChangeNotifier {
   List<Expense> get expenses => _expenses;
   bool get isLoading => _isLoading;
 
-  // ───────── persistence ─────────
+  // ───────── Firestore ─────────
 
-  Future<void> load() async {
-    _expenses = await _repository.getAll();
-    _isLoading = false;
-    notifyListeners();
+  /// Starts listening. Adds, edits and deletes (from this device or another)
+  /// arrive through the stream, so nothing has to reload by hand.
+  void listen() {
+    _subscription ??= _repository.watchAll().listen(
+      (snapshot) {
+        _setExpenses(snapshot.data);
+        updateSyncStatus(snapshot);
+        _isLoading = false;
+        notifyListeners();
+      },
+      onError: (Object e) {
+        debugPrint('Expenses stream failed: $e');
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
   }
 
-  Future<void> add(Expense expense) async {
-    await _repository.add(expense);
-    await load();
-  }
+  void add(Expense expense) => _repository.add(expense);
 
-  Future<void> edit(Expense expense) async {
-    await _repository.update(expense);
-    await load();
-  }
+  void edit(Expense expense) => _repository.update(expense);
 
   /// Removes from the list first so a swiped Dismissible leaves the tree
-  /// immediately, then deletes from SQLite.
-  Future<void> remove(int id) async {
-    _expenses = _expenses.where((e) => e.id != id).toList();
+  /// immediately; the stream then confirms the delete.
+  void remove(String id) {
+    _setExpenses(_expenses.where((e) => e.id != id).toList());
     notifyListeners();
-    await _repository.delete(id);
+    _repository.delete(id);
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 
   // ───────── derived numbers ─────────
+
+  /// Month totals are asked for many times per frame (dashboard, budget,
+  /// reports, the 12-month trend), so they are cached until the list changes.
+  final _monthTotalCache = <int, double>{};
+
+  void _setExpenses(List<Expense> expenses) {
+    _expenses = expenses;
+    _monthTotalCache.clear();
+  }
 
   Iterable<Expense> _inMonth(DateTime month) => _expenses.where(
     (e) => e.date.year == month.year && e.date.month == month.month,
@@ -66,7 +92,10 @@ class ExpenseProvider extends ChangeNotifier {
   double _sum(Iterable<Expense> items) =>
       items.fold<double>(0, (sum, e) => sum + e.amount);
 
-  double spentInMonth(DateTime month) => _sum(_inMonth(month));
+  double spentInMonth(DateTime month) => _monthTotalCache.putIfAbsent(
+    month.year * 12 + month.month,
+    () => _sum(_inMonth(month)),
+  );
 
   double spentOn(DateTime day) =>
       _sum(_expenses.where((e) => isSameDay(e.date, day)));
@@ -86,8 +115,8 @@ class ExpenseProvider extends ChangeNotifier {
   }
 
   /// categoryId -> total spent in [month].
-  Map<int, double> spentByCategoryInMonth(DateTime month) {
-    final totals = <int, double>{};
+  Map<String, double> spentByCategoryInMonth(DateTime month) {
+    final totals = <String, double>{};
     for (final e in _inMonth(month)) {
       totals.update(
         e.category.id!,

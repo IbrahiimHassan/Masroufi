@@ -23,7 +23,7 @@ class BudgetScreen extends StatelessWidget {
       initialValue: budget.amount > 0 ? budget.amount : null,
     );
     if (amount == null || !context.mounted) return;
-    await context.read<BudgetProvider>().updateAmount(budget, amount);
+    context.read<BudgetProvider>().updateAmount(budget, amount);
   }
 
   @override

@@ -1,65 +1,55 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/tables.dart';
-import '../../categories/data/category.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../../core/firebase/collections.dart';
+import '../../../core/firebase/firestore_cache.dart';
 import 'expense.dart';
 
-/// All SQL for expenses lives here — the UI never touches the database.
-/// Every query is scoped to [_userId], so accounts never see each other's data.
+/// All Firestore access for expenses lives here — the UI never touches it.
+/// Everything is under users/{uid}, so accounts never see each other's data.
 class ExpenseRepository {
-  ExpenseRepository(this._appDb, this._userId);
+  ExpenseRepository(this._firestore, this._uid);
 
-  final AppDatabase _appDb;
-  final int _userId;
+  final FirebaseFirestore _firestore;
+  final String _uid;
 
-  static const _selectWithCategory =
-      '''
-    SELECT e.*, ${Category.joinColumns}
-    FROM ${ExpensesTable.table} e
-    JOIN ${CategoriesTable.table} c
-      ON c.${CategoriesTable.id} = e.${ExpensesTable.categoryId}
-  ''';
+  CollectionReference<Map<String, dynamic>> get _expenses => _firestore
+      .collection(UsersCollection.name)
+      .doc(_uid)
+      .collection(ExpensesCollection.name);
 
-  Future<List<Expense>> getAll() async {
-    final db = await _appDb.database;
-    final rows = await db.rawQuery(
-      '$_selectWithCategory '
-      'WHERE e.${ExpensesTable.userId} = ? '
-      'ORDER BY e.${ExpensesTable.expenseDate} DESC, e.${ExpensesTable.id} DESC',
-      [_userId],
+  /// Newest first. Emits the cached copy immediately, then server updates
+  /// (including changes made on other devices).
+  Stream<Synced<List<Expense>>> watchAll() => _expenses
+      .orderBy(ExpensesCollection.expenseDate, descending: true)
+      .snapshots(includeMetadataChanges: true)
+      .map(
+        (snapshot) => Synced(
+          snapshot.docs.map(Expense.fromFirestore).toList(),
+          snapshot.metadata,
+        ),
+      );
+
+  /// Returns the new id right away; the upload happens in the background.
+  String add(Expense expense) {
+    final doc = _expenses.doc();
+    sendInBackground(
+      doc.set({
+        ...expense.toFirestore(),
+        ExpensesCollection.createdAt: FieldValue.serverTimestamp(),
+        ExpensesCollection.updatedAt: FieldValue.serverTimestamp(),
+      }),
     );
-    return rows.map(Expense.fromMap).toList();
+    return doc.id;
   }
 
-  Future<int> add(Expense expense) async {
-    final db = await _appDb.database;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return db.insert(ExpensesTable.table, {
-      ...expense.toMap(),
-      ExpensesTable.userId: _userId,
-      ExpensesTable.createdAt: now,
-      ExpensesTable.updatedAt: now,
-    });
-  }
-
-  Future<void> update(Expense expense) async {
-    final db = await _appDb.database;
-    await db.update(
-      ExpensesTable.table,
-      {
-        ...expense.toMap(),
-        ExpensesTable.updatedAt: DateTime.now().millisecondsSinceEpoch,
-      },
-      where: '${ExpensesTable.id} = ? AND ${ExpensesTable.userId} = ?',
-      whereArgs: [expense.id, _userId],
+  void update(Expense expense) {
+    sendInBackground(
+      _expenses.doc(expense.id).update({
+        ...expense.toFirestore(),
+        ExpensesCollection.updatedAt: FieldValue.serverTimestamp(),
+      }),
     );
   }
 
-  Future<void> delete(int id) async {
-    final db = await _appDb.database;
-    await db.delete(
-      ExpensesTable.table,
-      where: '${ExpensesTable.id} = ? AND ${ExpensesTable.userId} = ?',
-      whereArgs: [id, _userId],
-    );
-  }
+  void delete(String id) => sendInBackground(_expenses.doc(id).delete());
 }
